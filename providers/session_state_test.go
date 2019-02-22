@@ -12,6 +12,11 @@ import (
 const secret = "0123456789abcdefghijklmnopqrstuv"
 const altSecret = "0000000000abcdefghijklmnopqrstuv"
 
+// timeUnix safely converts *time.Time to a Unix time.
+func timeUnix(p *time.Time) int64 {
+	return timeVal(p).Unix()
+}
+
 func TestSessionStateSerialization(t *testing.T) {
 	c, err := cookie.NewCipher([]byte(secret))
 	assert.Equal(t, nil, err)
@@ -21,7 +26,7 @@ func TestSessionStateSerialization(t *testing.T) {
 		Email:        "user@domain.com",
 		AccessToken:  "token1234",
 		IDToken:      "rawtoken1234",
-		ExpiresOn:    time.Now().Add(time.Duration(1) * time.Hour),
+		ExpiresOn:    timePtr(time.Now().Add(time.Duration(1) * time.Hour)),
 		RefreshToken: "refresh4321",
 	}
 	encoded, err := s.EncodeSessionState(c)
@@ -34,7 +39,7 @@ func TestSessionStateSerialization(t *testing.T) {
 	assert.Equal(t, s.Email, ss.Email)
 	assert.Equal(t, s.AccessToken, ss.AccessToken)
 	assert.Equal(t, s.IDToken, ss.IDToken)
-	assert.Equal(t, s.ExpiresOn.Unix(), ss.ExpiresOn.Unix())
+	assert.Equal(t, timeUnix(s.ExpiresOn), timeUnix(ss.ExpiresOn))
 	assert.Equal(t, s.RefreshToken, ss.RefreshToken)
 
 	// ensure a different cipher can't decode properly (ie: it gets gibberish)
@@ -43,7 +48,7 @@ func TestSessionStateSerialization(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, "user", ss.User)
 	assert.Equal(t, s.Email, ss.Email)
-	assert.Equal(t, s.ExpiresOn.Unix(), ss.ExpiresOn.Unix())
+	assert.Equal(t, timeUnix(s.ExpiresOn), timeUnix(ss.ExpiresOn))
 	assert.NotEqual(t, s.AccessToken, ss.AccessToken)
 	assert.NotEqual(t, s.IDToken, ss.IDToken)
 	assert.NotEqual(t, s.RefreshToken, ss.RefreshToken)
@@ -58,7 +63,7 @@ func TestSessionStateSerializationWithUser(t *testing.T) {
 		User:         "just-user",
 		Email:        "user@domain.com",
 		AccessToken:  "token1234",
-		ExpiresOn:    time.Now().Add(time.Duration(1) * time.Hour),
+		ExpiresOn:    timePtr(time.Now().Add(time.Duration(1) * time.Hour)),
 		RefreshToken: "refresh4321",
 	}
 	encoded, err := s.EncodeSessionState(c)
@@ -70,7 +75,7 @@ func TestSessionStateSerializationWithUser(t *testing.T) {
 	assert.Equal(t, s.User, ss.User)
 	assert.Equal(t, s.Email, ss.Email)
 	assert.Equal(t, s.AccessToken, ss.AccessToken)
-	assert.Equal(t, s.ExpiresOn.Unix(), ss.ExpiresOn.Unix())
+	assert.Equal(t, timeUnix(s.ExpiresOn), timeUnix(ss.ExpiresOn))
 	assert.Equal(t, s.RefreshToken, ss.RefreshToken)
 
 	// ensure a different cipher can't decode properly (ie: it gets gibberish)
@@ -79,7 +84,7 @@ func TestSessionStateSerializationWithUser(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, s.User, ss.User)
 	assert.Equal(t, s.Email, ss.Email)
-	assert.Equal(t, s.ExpiresOn.Unix(), ss.ExpiresOn.Unix())
+	assert.Equal(t, timeUnix(s.ExpiresOn), timeUnix(ss.ExpiresOn))
 	assert.NotEqual(t, s.AccessToken, ss.AccessToken)
 	assert.NotEqual(t, s.RefreshToken, ss.RefreshToken)
 }
@@ -88,7 +93,7 @@ func TestSessionStateSerializationNoCipher(t *testing.T) {
 	s := &SessionState{
 		Email:        "user@domain.com",
 		AccessToken:  "token1234",
-		ExpiresOn:    time.Now().Add(time.Duration(1) * time.Hour),
+		ExpiresOn:    timePtr(time.Now().Add(time.Duration(1) * time.Hour)),
 		RefreshToken: "refresh4321",
 	}
 	encoded, err := s.EncodeSessionState(nil)
@@ -108,7 +113,7 @@ func TestSessionStateSerializationNoCipherWithUser(t *testing.T) {
 		User:         "just-user",
 		Email:        "user@domain.com",
 		AccessToken:  "token1234",
-		ExpiresOn:    time.Now().Add(time.Duration(1) * time.Hour),
+		ExpiresOn:    timePtr(time.Now().Add(time.Duration(1) * time.Hour)),
 		RefreshToken: "refresh4321",
 	}
 	encoded, err := s.EncodeSessionState(nil)
@@ -124,10 +129,10 @@ func TestSessionStateSerializationNoCipherWithUser(t *testing.T) {
 }
 
 func TestExpired(t *testing.T) {
-	s := &SessionState{ExpiresOn: time.Now().Add(time.Duration(-1) * time.Minute)}
+	s := &SessionState{ExpiresOn: timePtr(time.Now().Add(time.Duration(-1) * time.Minute))}
 	assert.Equal(t, true, s.IsExpired())
 
-	s = &SessionState{ExpiresOn: time.Now().Add(time.Duration(1) * time.Minute)}
+	s = &SessionState{ExpiresOn: timePtr(time.Now().Add(time.Duration(1) * time.Minute))}
 	assert.Equal(t, false, s.IsExpired())
 
 	s = &SessionState{}
@@ -145,10 +150,8 @@ type testCase struct {
 //
 // - Currently only tests without cipher here because we have no way to mock
 // the random generator used in EncodeSessionState.
-// - The zero value of time.Time is encoded to "0001-01-01T00:00:00Z"
-// (`json:",omitempty"` is not effective for time.Time).
 func TestEncodeSessionState(t *testing.T) {
-	e := time.Now().Add(time.Duration(1) * time.Hour)
+	e := timePtr(time.Now().Add(time.Duration(1) * time.Hour))
 
 	testCases := []testCase{
 		{
@@ -156,7 +159,7 @@ func TestEncodeSessionState(t *testing.T) {
 				Email: "user@domain.com",
 				User:  "just-user",
 			},
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user"}`,
 		},
 		{
 			SessionState: SessionState{
@@ -167,7 +170,7 @@ func TestEncodeSessionState(t *testing.T) {
 				ExpiresOn:    e,
 				RefreshToken: "refresh4321",
 			},
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user"}`,
 		},
 	}
 
@@ -186,7 +189,7 @@ func TestEncodeSessionState(t *testing.T) {
 
 // TestDecodeSessionState tests DecodeSessionState with the test vector
 func TestDecodeSessionState(t *testing.T) {
-	e := time.Now().Add(time.Duration(1) * time.Hour)
+	e := timePtr(time.Now().Add(time.Duration(1) * time.Hour))
 	eJSON, _ := e.MarshalJSON()
 	eString := string(eJSON)
 	eUnix := e.Unix()
@@ -200,7 +203,7 @@ func TestDecodeSessionState(t *testing.T) {
 				Email: "user@domain.com",
 				User:  "just-user",
 			},
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user"}`,
 		},
 		{
 			SessionState: SessionState{
@@ -239,16 +242,16 @@ func TestDecodeSessionState(t *testing.T) {
 				Email: "user@domain.com",
 				User:  "just-user",
 			},
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user"}`,
 			Cipher:  c,
 		},
 		{
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z","AccessToken":"X"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user","AccessToken":"X"}`,
 			Cipher:  c,
 			Error:   true,
 		},
 		{
-			Encoded: `{"Email":"user@domain.com","User":"just-user","ExpiresOn":"0001-01-01T00:00:00Z","IDToken":"XXXX"}`,
+			Encoded: `{"Email":"user@domain.com","User":"just-user","IDToken":"XXXX"}`,
 			Cipher:  c,
 			Error:   true,
 		},
@@ -273,6 +276,7 @@ func TestDecodeSessionState(t *testing.T) {
 			Cipher:  c,
 			Error:   true,
 		},
+
 		{
 			SessionState: SessionState{
 				Email:        "user@domain.com",
@@ -313,7 +317,7 @@ func TestDecodeSessionState(t *testing.T) {
 			assert.Equal(t, tc.AccessToken, ss.AccessToken)
 			assert.Equal(t, tc.RefreshToken, ss.RefreshToken)
 			assert.Equal(t, tc.IDToken, ss.IDToken)
-			assert.Equal(t, tc.ExpiresOn.Unix(), ss.ExpiresOn.Unix())
+			assert.Equal(t, timeUnix(tc.ExpiresOn), timeUnix(ss.ExpiresOn))
 		}
 	}
 }

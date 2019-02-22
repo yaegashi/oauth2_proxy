@@ -12,17 +12,31 @@ import (
 
 // SessionState is used to store information about the currently authenticated user session
 type SessionState struct {
-	AccessToken  string    `json:",omitempty"`
-	IDToken      string    `json:",omitempty"`
-	ExpiresOn    time.Time `json:",omitempty"`
-	RefreshToken string    `json:",omitempty"`
-	Email        string    `json:",omitempty"`
-	User         string    `json:",omitempty"`
+	AccessToken  string     `json:",omitempty"`
+	IDToken      string     `json:",omitempty"`
+	ExpiresOn    *time.Time `json:",omitempty"`
+	RefreshToken string     `json:",omitempty"`
+	Email        string     `json:",omitempty"`
+	User         string     `json:",omitempty"`
+}
+
+// timePtr is a helper to convert time.Time value to pointer.
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
+// timeVal is a helper to convert time.Time pointer to value.
+// It regards nil as a zero value.
+func timeVal(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }
 
 // IsExpired checks whether the session has expired
 func (s *SessionState) IsExpired() bool {
-	if !s.ExpiresOn.IsZero() && s.ExpiresOn.Before(time.Now()) {
+	if !timeVal(s.ExpiresOn).IsZero() && s.ExpiresOn.Before(time.Now()) {
 		return true
 	}
 	return false
@@ -37,7 +51,7 @@ func (s *SessionState) String() string {
 	if s.IDToken != "" {
 		o += " id_token:true"
 	}
-	if !s.ExpiresOn.IsZero() {
+	if !timeVal(s.ExpiresOn).IsZero() {
 		o += fmt.Sprintf(" expires:%s", s.ExpiresOn)
 	}
 	if s.RefreshToken != "" {
@@ -126,9 +140,9 @@ func legacyDecodeSessionState(v string, c *cookie.Cipher) (*SessionState, error)
 	i++
 	ts, err := strconv.Atoi(chunks[i])
 	if err != nil {
-		return nil, fmt.Errorf("invalid session state (legacy: wrong expiration time: %s)", err)
+		return nil, err
 	}
-	ss.ExpiresOn = time.Unix(int64(ts), 0)
+	ss.ExpiresOn = timePtr(time.Unix(int64(ts), 0))
 
 	i++
 	ss.RefreshToken = chunks[i]

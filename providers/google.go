@@ -146,7 +146,7 @@ func (p *GoogleProvider) Redeem(redirectURL, code string) (s *SessionState, err 
 	s = &SessionState{
 		AccessToken:  jsonResponse.AccessToken,
 		IDToken:      jsonResponse.IDToken,
-		ExpiresOn:    time.Now().Add(time.Duration(jsonResponse.ExpiresIn) * time.Second).Truncate(time.Second),
+		ExpiresOn:    timePtr(time.Now().Add(time.Duration(jsonResponse.ExpiresIn) * time.Second).Truncate(time.Second)),
 		RefreshToken: jsonResponse.RefreshToken,
 		Email:        email,
 	}
@@ -256,7 +256,7 @@ func (p *GoogleProvider) ValidateGroup(email string) bool {
 // RefreshSessionIfNeeded checks if the session has expired and uses the
 // RefreshToken to fetch a new ID token if required
 func (p *GoogleProvider) RefreshSessionIfNeeded(s *SessionState) (bool, error) {
-	if s == nil || s.ExpiresOn.After(time.Now()) || s.RefreshToken == "" {
+	if s == nil || timeVal(s.ExpiresOn).After(time.Now()) || s.RefreshToken == "" {
 		return false, nil
 	}
 
@@ -272,7 +272,7 @@ func (p *GoogleProvider) RefreshSessionIfNeeded(s *SessionState) (bool, error) {
 
 	origExpiration := s.ExpiresOn
 	s.AccessToken = newToken
-	s.ExpiresOn = time.Now().Add(duration).Truncate(time.Second)
+	s.ExpiresOn = timePtr(time.Now().Add(duration).Truncate(time.Second))
 	log.Printf("refreshed access token %s (expired on %s)", s, origExpiration)
 	return true, nil
 }
